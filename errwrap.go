@@ -1,10 +1,11 @@
 package errwrap
 
 import (
-	"io"
 	"errors"
-	"strings"
 	"fmt"
+	"io"
+	"reflect"
+	"strings"
 )
 
 type ErrorWrapperInterface interface {
@@ -14,6 +15,7 @@ type ErrorWrapperInterface interface {
 	Prev() ErrorWrapperInterface
 	List() []error
 	Each(func(err error) error) error
+	EachType(cb func(typ reflect.Type, err error) error) (err error)
 	Is(err error) bool
 }
 
@@ -68,6 +70,18 @@ func (w Wrapper) Each(cb func(err error) error) (err error) {
 	return
 }
 
+func (w Wrapper) EachType(cb func(typ reflect.Type, err error) error) (err error) {
+	var wr ErrorWrapperInterface = w
+	for wr != nil {
+		err = cb(TypeOf(wr.Err()), wr.Err())
+		if err != nil {
+			return err
+		}
+		wr = wr.Prev()
+	}
+	return
+}
+
 func (w Wrapper) Is(err error) (is bool) {
 	w.Each(func(arg error) error {
 		if err == arg {
@@ -99,4 +113,12 @@ func Wrap(child error, self interface{}, args ...interface{}) ErrorWrapperInterf
 func Wrapped(err error) bool {
 	_, ok := err.(ErrorWrapperInterface)
 	return ok
+}
+
+func TypeOf(e error) (typ reflect.Type) {
+	typ = reflect.TypeOf(e)
+	for typ.Kind() == reflect.Ptr || typ.Kind() == reflect.Interface {
+		typ = typ.Elem()
+	}
+	return
 }
